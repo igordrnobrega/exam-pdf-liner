@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Exam Liner</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="app-header">
+        <h1>Exam Liner</h1>
+        <p>
+          Solte o PDF do laudo e copie os resultados em uma linha. Tudo roda no seu navegador;
+          nenhum arquivo sai do computador.
+        </p>
+      </header>
+
+      <label id="drop" class="drop" for="file">
+        <input id="file" type="file" accept="application/pdf" multiple hidden />
+        <span class="drop-title">Arraste PDFs aqui ou clique para escolher</span>
+        <span class="drop-hint">Laboratórios suportados: Sabin, DASA (Exame, Lavoisier…)</span>
+      </label>
+
+      <section class="options">
+        <label><input type="checkbox" id="opt-full" /> Incluir itens secundários (HCM, CHCM, diferencial, VPM…)</label>
+        <label><input type="checkbox" id="opt-unknown" /> Incluir itens não reconhecidos</label>
+      </section>
+
+      <section id="results" class="results"></section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
