@@ -29,6 +29,8 @@ export interface Layout {
   accepts: (row: RowCandidate) => boolean;
   /** Whether a non-row line starts a new exam (sees the next few lines for lookahead). */
   isTitle: (line: string, next: string[]) => boolean;
+  /** A line that closes the current exam, so later rows are not attributed to it. */
+  endsExam?: RegExp;
 }
 
 function isUpperDominant(s: string): boolean {
@@ -38,8 +40,8 @@ function isUpperDominant(s: string): boolean {
 }
 
 // Sabin prints an uppercase exam title, then "Método:"/"Material:" lines, then
-// either "RESULTADO: valor" or an uppercase table (hemograma). Reference values
-// come on separate mixed-case lines, so case alone tells results from noise.
+// either "RESULTADO: valor" or an uppercase table (hemograma), then reference
+// values on separate mixed-case lines, and closes with "Coleta: ... Liberação: ...".
 const SABIN_META = /^(Método|Material)\s*:/i;
 
 export const SABIN: Layout = {
@@ -47,6 +49,7 @@ export const SABIN: Layout = {
   detect: /Código da OS[\s\S]*Responsável Técnico/i,
   patient: [/^Nome\s*:\s*(.+?)\s*$/i],
   skipPage: /LAUDO COMPARATIVO/i,
+  endsExam: /^Coleta\s*:/i,
   skip: [
     /^(Nome|DN|RG|CPF|Médico|Convênio|Unidade|Sexo)\s*:/i,
     /^(Responsável Técnico|Endereço da Unidade|Laborat[oó]rio registrado)/i,
@@ -72,12 +75,17 @@ export const SABIN: Layout = {
     next.some((n) => SABIN_META.test(n) || /^RESULTADO\s*:/.test(n)),
 };
 
-// DASA (Exame, Lavoisier, ...) prints self-describing Title Case rows with the
-// reference on the same line: "Creatinina 1,22 mg/dL 0,70 a 1,20 mg/dL".
+// DASA (Exame, Lavoisier, ...) prints a Title Case exam name, then "(Material: ...)"
+// or a "RESULTADO INTERVALO DE REFERÊNCIA" header, then self-describing rows with
+// the reference on the same line ("Creatinina 1,22 mg/dL 0,70 a 1,20 mg/dL"), and
+// closes each exam with "Assinado eletronicamente por ...".
+const DASA_AFTER_TITLE = /^\((Material|Método)\s*:|RESULTADO INTERVALO|^Série (Vermelha|Branca)/i;
+
 export const DASA: Layout = {
   lab: 'DASA',
   detect: /DASA|dasa\.com\.br/i,
   patient: [/^Cliente:\s*(.+?)\s*Prescrição/i, /^(.+?)\s+CPF\s*:/],
+  endsExam: /^Assinado eletronicamente/i,
   skip: [
     /^(Cliente|Data de Nascimento|Médico|Solicitante|Prontuário|Atendimento|Local|Exame Resultado|Gênero)\b/i,
     /CPF:|FAP:|Token:/,
@@ -89,8 +97,9 @@ export const DASA: Layout = {
   // Prose also ends in numbers ("acima de 18 anos"), so demand a real unit or a
   // %/absolute pair, and a label short enough not to be a sentence.
   accepts: ({ label, values }) => label.length <= 40 && (values.some((v) => v.unit) || values.length >= 2),
-  // Rows name their exam themselves; titles add nothing.
-  isTitle: () => false,
+  // Titles matter for exams whose rows are not self-describing (gasometria: "pH").
+  isTitle: (line, next) =>
+    line.length >= 3 && line.length <= 60 && !/\d|:/.test(line) && DASA_AFTER_TITLE.test(next[0] ?? ''),
 };
 
 export const LAYOUTS = [SABIN, DASA];

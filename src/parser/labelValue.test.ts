@@ -43,11 +43,12 @@ describe('parseLabelValue (Sabin layout)', () => {
     expect(report.patient).toBe('MARIA DA SILVA');
     expect(report.collectedAt).toBe('04/09/2026');
     expect(report.items.map((i) => [i.label, i.values])).toEqual([
-      ['HEMOGLOBINA', [{ value: '11,3', unit: 'g/dL' }, { value: '13,0' }]],
+      ['HEMOGLOBINA', [{ value: '11,3', unit: 'g/dl' }, { value: '13,0' }]],
       ['HEMATÓCRITO', [{ value: '33,7', unit: '%' }, { value: '36,0' }]],
       ['LEUCÓCITOS', [{ value: '3.660' }, { value: '100' }, { value: '3.600' }]],
       ['SEGMENTADOS', [{ value: '56' }, { value: '2.049' }]],
-      ['PLAQUETAS', [{ value: '85', unit: 'x 10³/mm3' }, { value: '130' }]],
+      // "85 x 10³/mm3" is rescaled at parse time into the canonical per-volume unit.
+      ['PLAQUETAS', [{ value: '85.000', unit: '/mm3' }, { value: '130' }]],
     ]);
     expect(buildLine(report)).toBe(
       'MARIA DA SILVA – 04/09/2026: Hb 11,3 Ht 33,7 Leuc 3.660 N 2.049 Plaq 85.000.',
@@ -154,8 +155,77 @@ describe('parseLabelValue (DASA layout)', () => {
       'Creatinina',
       '*eGFR',
     ]);
+    // Second Leucócitos/Neutrófilos rows are duplicates: first occurrence wins.
     expect(buildLine(report)).toBe(
-      'Orlando Silva – 28/08/2026: Hb 7,4 VCM 87,9 Leuc 2.120 Leuc 4.430 N 276 N 1.927 Plaq 21.000 Cr 1,22 TFG 58.',
+      'Orlando Silva – 28/08/2026: Hb 7,4 VCM 87,9 Leuc 2.120 N 276 Plaq 21.000 Cr 1,22 TFG 58.',
     );
+  });
+
+  it('uses DASA titles for exams whose rows are not self-describing', () => {
+    const report = parseLabelValue(
+      [
+        {
+          page: 1,
+          lines: [
+            'Gasometria Arterial',
+            '(Material: Sangue Arterial)',
+            'pH 7,38 7,35 a 7,45',
+            'pCO2 42 mmHg 35 a 45 mmHg',
+            'HCO3 24 mmol/L 22 a 26 mmol/L',
+            'Assinado eletronicamente por: X (01/01/2026 00:00 BRT)',
+            'Lactato Desidrogenase 250 U/L 120 a 246 U/L',
+            'Blastos 2,0 % 0,0 a 0,0 %',
+          ],
+        },
+      ],
+      DASA,
+    );
+    // Blastos has only a percentage: dropped rather than printing the reference bound as a count.
+    expect(buildLine(report, { full: true })).toBe('DHL 250 GSA pH 7,38 pCO2 42 HCO3 24.');
+  });
+});
+
+describe('units and scaling', () => {
+  const rows = (lines: string[]) => parseLabelValue([sabinPage(1, ['HEMOGRAMA COMPLETO', 'Método : X', ...lines])], SABIN);
+
+  it('rescales thousands-per-volume units into absolute counts, keeping < and >', () => {
+    const report = rows([
+      'PLAQUETAS < 10 x 10³/mm³ 130 a 450',
+      'RETICULÓCITOS',
+      'Método : Y',
+      'VALOR ABSOLUTO..............: 54 x 10³/mm3',
+      'Na+..............:140 mmol/L',
+      'SEGMENTADOS 56 -- 40-70 1.480 a 7.700',
+    ]);
+    expect(report.items.map((i) => [i.label, i.values[0]])).toEqual([
+      ['PLAQUETAS', { value: '<10.000', unit: '/mm3' }],
+      ['VALOR ABSOLUTO', { value: '54.000', unit: '/mm3' }],
+      ['Na+', { value: '140', unit: 'mmol/l' }],
+      ['SEGMENTADOS', { value: '56' }],
+    ]);
+    // SEGMENTADOS has no absolute count: dropped, not printed as "N 56".
+    expect(buildLine(report, { full: true })).toBe('MARIA DA SILVA – 04/09/2026: Plaq <10.000 Retic abs 54.000 Na 140.');
+  });
+
+  it('closes an exam on its Coleta line so a missed title cannot inherit it', () => {
+    const report = parseLabelValue(
+      [
+        sabinPage(1, [
+          'CREATININA',
+          'Método : X',
+          'RESULTADO: 0,97 mg/dL',
+          'Coleta: 04/09/2026 - 12:00:00',
+          'UREIA',
+          'Nota: three lines of notes',
+          'Nota: before the method line',
+          'Nota: so the title is missed',
+          'Método : Y',
+          'RESULTADO: 50 mg/dL',
+        ]),
+      ],
+      SABIN,
+    );
+    expect(buildLine(report)).toBe('MARIA DA SILVA – 04/09/2026: Cr 0,97.');
+    expect(buildLine(report, { includeUnknown: true })).toBe('MARIA DA SILVA – 04/09/2026: Cr 0,97 Resultado 50.');
   });
 });

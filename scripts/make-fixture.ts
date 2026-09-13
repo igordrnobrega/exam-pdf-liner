@@ -94,8 +94,8 @@ async function main(file: string, name: string): Promise<void> {
 }
 
 const [, , file, name] = process.argv;
-if (!file || !name) {
-  console.error('usage: make-fixture.ts <file.pdf> <name>');
+if (!file || !name || !/^[a-z0-9-]+$/.test(name)) {
+  console.error('usage: make-fixture.ts <file.pdf> <name>   (name: lowercase letters, digits and dashes)');
   process.exit(1);
 }
 await main(file, name);

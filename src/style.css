@@ -208,3 +208,8 @@ details summary {
 .row-unknown {
   color: var(--warn);
 }
+
+.row-duplicate {
+  color: var(--muted);
+  text-decoration: line-through;
+}

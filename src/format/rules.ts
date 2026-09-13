@@ -7,14 +7,12 @@ export interface Rule {
   match: (name: string, exam: string) => boolean;
   /** Hidden unless the user asks for the full line. */
   optional?: boolean;
-  /** Which measurement of the row to print; defaults to the first. */
+  /** Which measurement of the row to print; defaults to the first. Returning undefined drops the item. */
   pick?: (values: Measurement[]) => Measurement | undefined;
   /** Appended to the value ("%" for percentages). */
   suffix?: string;
   /** Group prefix emitted once before the first item of the group ("GSV"). */
   group?: (item: ExamItem) => string;
-  /** Value post-processing (e.g. platelets ×1000). */
-  transform?: (m: Measurement) => string;
 }
 
 /** Uppercase, strip accents, dots and duplicate spaces. */
@@ -33,34 +31,41 @@ export function itemName(item: ExamItem): string {
   return /^RESULTADO$/i.test(item.label) ? item.exam : item.label;
 }
 
-const name = (pattern: string) => {
+/** Matches the name, optionally only inside exams whose title matches `examPattern`. */
+const name = (pattern: string, examPattern?: string) => {
   const re = new RegExp(pattern, 'i');
-  return (n: string) => re.test(n);
+  const ex = examPattern ? new RegExp(examPattern, 'i') : undefined;
+  return (n: string, exam: string) => re.test(n) && (!ex || ex.test(exam));
 };
 
-const nameIn = (pattern: string, examPattern: string) => {
-  const re = new RegExp(pattern, 'i');
-  const ex = new RegExp(examPattern, 'i');
-  return (n: string, exam: string) => re.test(n) && ex.test(exam);
-};
+const any =
+  (...matchers: Rule['match'][]): Rule['match'] =>
+  (n, exam) =>
+    matchers.some((m) => m(n, exam));
 
 // --- measurement pickers -----------------------------------------------------
+// Units are canonical here (labelValue.ts rescales "x 10³/mm3" into "/mm3").
 
-const perVolume = (values: Measurement[]) => values.find((v) => v.unit && /[µμu]l|mm3/i.test(v.unit));
+const PER_VOLUME = /^\/(µl|mm3)$/;
+const perVolume = (values: Measurement[]) => values.find((v) => v.unit && PER_VOLUME.test(v.unit));
 
-/** Absolute count from a leucogram row: the value tagged /µL, else the second one (% comes first). */
-const absolute = (values: Measurement[]) => perVolume(values) ?? values[1];
+/**
+ * Absolute count from a leucogram row. Layouts print either "% abs" with no
+ * units (Sabin, DASA-DF) or "% /µL" pairs (DASA-SP). A row with only the
+ * percentage yields undefined so the item is dropped instead of printing a %
+ * (or the reference bound that follows it) as a count.
+ */
+const absolute = (values: Measurement[]): Measurement | undefined => {
+  const tagged = perVolume(values);
+  if (tagged) return tagged;
+  const [pct, abs] = values;
+  if (!pct || pct.unit || !abs || abs.unit) return undefined;
+  return abs;
+};
 
 /** Total leucocytes: the value tagged /µL, else whichever of the first two is not the "100" %. */
 const leukocytes = (values: Measurement[]) =>
-  perVolume(values) ?? values.slice(0, 2).find((v) => v.value !== '100') ?? values[0];
-
-/** "85" printed as "x 10³/mm3" → "85.000"; counts already in /µL stay as printed. */
-function thousands(m: Measurement): string {
-  if (!/x\s*10/i.test(m.unit ?? '')) return m.value;
-  const n = Number(m.value.replace(/\./g, '').replace(',', '.'));
-  return Number.isFinite(n) ? Math.round(n * 1000).toLocaleString('pt-BR') : m.value;
-}
+  perVolume(values) ?? values.slice(0, 2).find((v) => !/^100(,0+)?$/.test(v.value)) ?? values[0];
 
 /** Gasometria group label depends on the sample: GSA (arterial) or GSV (venosa). */
 const gasometria = (item: ExamItem) => (/ARTERIAL/i.test(item.exam) ? 'GSA' : 'GSV');
@@ -84,12 +89,12 @@ export const RULES: Rule[] = [
   { abbr: 'Linf', optional: true, pick: absolute, match: name('^LINFOCITOS') },
   { abbr: 'Mono', optional: true, pick: absolute, match: name('^MONOCITOS$') },
   { abbr: 'Blastos', optional: true, pick: absolute, match: name('^BLASTOS$') },
-  { abbr: 'Plaq', transform: thousands, match: name('^(CONTAGEM DE )?PLAQUETAS$') },
+  { abbr: 'Plaq', match: name('^(CONTAGEM DE )?PLAQUETAS$') },
   { abbr: 'VPM', optional: true, match: name('^(VMP|VPM)$') },
-  { abbr: 'Retic', suffix: '%', match: nameIn('^VALOR PERCENTUAL$', 'RETICUL') },
-  { abbr: 'Retic abs', optional: true, match: nameIn('^VALOR ABSOLUTO$', 'RETICUL') },
-  { abbr: 'IRF', optional: true, suffix: '%', match: nameIn('^IRF', 'RETICUL') },
-  { abbr: 'Ret-He', optional: true, match: nameIn('^RET-?HE', 'RETICUL') },
+  { abbr: 'Retic', suffix: '%', match: any(name('^VALOR PERCENTUAL$', 'RETICUL'), name('^RETICULOCITOS$')) },
+  { abbr: 'Retic abs', optional: true, match: name('^VALOR ABSOLUTO$', 'RETICUL') },
+  { abbr: 'IRF', optional: true, suffix: '%', match: name('^IRF', 'RETICUL') },
+  { abbr: 'Ret-He', optional: true, match: name('^RET-?HE', 'RETICUL') },
 
   // Ferro / vitaminas
   { abbr: 'Ferro', match: name('^FERRO( SERICO)?$') },
@@ -139,11 +144,11 @@ export const RULES: Rule[] = [
   { abbr: 'Cr', match: name('^CREATININA') },
   { abbr: 'TFG', match: name('FILTRACAO GLOMERULAR|^\\*?E?TFG|^\\*?EGFR') },
   { abbr: 'AU', match: name('ACIDO URICO') },
-  { abbr: 'Na', match: name('^SODIO') },
-  { abbr: 'K', match: name('^POTASSIO') },
-  { abbr: 'Cl', match: name('^CLORO') },
+  { abbr: 'Na', match: name('^SODIO|^NA\\+$') },
+  { abbr: 'K', match: name('^POTASSIO|^K\\+$') },
+  { abbr: 'Cl', match: name('^CLORO|^CL-?$') },
   { abbr: 'Mg', match: name('^MAGNESIO') },
-  { abbr: 'Cai', match: name('CALCIO IONICO|CALCIO IONIZADO') },
+  { abbr: 'Cai', match: name('CALCIO IONICO|CALCIO IONIZADO|^CA\\+\\+') },
   { abbr: 'Ca', match: name('^CALCIO( TOTAL)?$') },
   { abbr: 'P', match: name('^FOSFORO') },
 
@@ -159,7 +164,7 @@ export const RULES: Rule[] = [
   { abbr: 'PT', match: name('^PROTEINAS TOTAIS') },
   { abbr: 'Amilase', match: name('^AMILASE') },
   { abbr: 'Lipase', match: name('^LIPASE') },
-  { abbr: 'DHL', match: name('DESIDROGENASE LA[CT]TICA|\\bDHL\\b|\\bLDH\\b') },
+  { abbr: 'DHL', match: name('DESIDROGENASE LA[CT]?TICA|LACTATO DESIDROGENASE|\\bDHL\\b|\\bLDH\\b') },
   { abbr: 'CPK', match: name('CREATINO ?FOSFOQUINASE|\\bCPK\\b|\\bCK\\b') },
 
   // Inflamação
@@ -168,10 +173,10 @@ export const RULES: Rule[] = [
   { abbr: 'Procalcitonina', match: name('PROCALCITONINA') },
 
   // Coagulação
-  { abbr: 'TAP', match: name('^PROTROMBINA \\(PACIENTE\\)') },
+  { abbr: 'TAP', match: name('^PROTROMBINA \\(PACIENTE\\)|^TEMPO DE PROTROMBINA') },
   { abbr: 'AP', suffix: '%', match: name('^ATIVIDADE DE PROTROMBINA') },
   { abbr: 'INR', match: name('\\bINR\\b|\\bRNI\\b') },
-  { abbr: 'TTPA', match: name('^PLASMA PACIENTE') },
+  { abbr: 'TTPA', match: name('^PLASMA PACIENTE|^TEMPO DE TROMBOPLASTINA') },
   { abbr: 'R', match: name('^RELACAO PACIENTE/CONTROLE') },
   { abbr: 'Fibrinogênio', match: name('^FIBRINOGENIO') },
   { abbr: 'D-dímero', match: name('DIMERO') },
@@ -181,15 +186,15 @@ export const RULES: Rule[] = [
   { abbr: 'BNP', match: name('^BNP') },
   { abbr: 'Troponina', match: name('TROPONINA') },
   { abbr: 'CK-MB', match: name('CK-?MB') },
-  { abbr: 'Lactato', match: name('LACTATO|ACIDO LATICO') },
+  { abbr: 'Lactato', match: name('^(ACIDO )?LA[CT]?TICO|^LACTATO$') },
 
   // Gasometria
-  { abbr: 'pH', group: gasometria, match: nameIn('^PH$', 'GASOMETRIA') },
-  { abbr: 'pCO2', group: gasometria, match: nameIn('^PCO2$', 'GASOMETRIA') },
-  { abbr: 'pO2', group: gasometria, match: nameIn('^PO2$', 'GASOMETRIA') },
-  { abbr: 'HCO3', group: gasometria, match: nameIn('^HCO3', 'GASOMETRIA') },
-  { abbr: 'BE', group: gasometria, match: nameIn('^B ?E$|^BE$|BASE EXCESS|EXCESSO DE BASE', 'GASOMETRIA') },
-  { abbr: 'SatO2', group: gasometria, suffix: '%', match: nameIn('^O2 SATURACAO|^SATURACAO|^SAT O2', 'GASOMETRIA') },
+  { abbr: 'pH', group: gasometria, match: name('^PH$', 'GASOMETRIA') },
+  { abbr: 'pCO2', group: gasometria, match: name('^PCO2$', 'GASOMETRIA') },
+  { abbr: 'pO2', group: gasometria, match: name('^PO2$', 'GASOMETRIA') },
+  { abbr: 'HCO3', group: gasometria, match: name('^HCO3', 'GASOMETRIA') },
+  { abbr: 'BE', group: gasometria, match: name('^B ?E$|^BE$|BASE EXCESS|EXCESSO DE BASE', 'GASOMETRIA') },
+  { abbr: 'SatO2', group: gasometria, suffix: '%', match: name('^O2 SATURACAO|^SATURACAO|^SAT O2', 'GASOMETRIA') },
 ];
 
 /** Rows that parse as results but are calibration controls, standards or indices nobody pastes. */

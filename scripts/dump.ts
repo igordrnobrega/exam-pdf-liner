@@ -27,7 +27,7 @@ if (mode === 'lines') {
   if (mode === 'items') {
     console.log(`lab=${report.lab} patient=${report.patient} collected=${report.collectedAt}`);
     for (const e of toEntries(report)) {
-      const flag = e.known ? (e.optional ? 'opt' : '   ') : '???';
+      const flag = e.duplicate ? 'dup' : e.known ? (e.optional ? 'opt' : '   ') : '???';
       console.log(
         `${flag} ${e.abbr.padEnd(24)} ${e.value.padEnd(10)} | p${e.item.page} ${e.item.exam} > ${e.item.label} [${e.item.values.map((m) => [m.value, m.unit].filter(Boolean).join(' ')).join(' | ')}]`,
       );

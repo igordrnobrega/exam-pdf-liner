@@ -2,16 +2,19 @@ import './pdf/stream-polyfill';
 import * as pdfjs from 'pdfjs-dist';
 import { extractLines } from './pdf/extract';
 import { parseReport, type ParsedReport } from './parser';
-import { buildLine, toEntries } from './format/line';
+import { buildLine, toEntries, type LineOptions } from './format/line';
 
 pdfjs.GlobalWorkerOptions.workerPort = new Worker(new URL('./pdf/worker.ts', import.meta.url), {
   type: 'module',
 });
 
+/** One dropped file: its card is created once and updated in place. */
 interface Result {
-  name: string;
+  card: HTMLElement;
   report?: ParsedReport;
-  error?: string;
+  /** Editable line; `dirty` once the user has typed in it, after which options no longer overwrite it. */
+  line?: HTMLTextAreaElement;
+  dirty: boolean;
 }
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
@@ -22,6 +25,8 @@ const optFull = $<HTMLInputElement>('#opt-full');
 const optUnknown = $<HTMLInputElement>('#opt-unknown');
 
 const results: Result[] = [];
+
+const options = (): LineOptions => ({ full: optFull.checked, includeUnknown: optUnknown.checked });
 
 fileInput.addEventListener('change', () => {
   if (fileInput.files) void processFiles(Array.from(fileInput.files));
@@ -47,22 +52,33 @@ drop.addEventListener('drop', (e) => {
   if (files.length) void processFiles(files);
 });
 
-optFull.addEventListener('change', render);
-optUnknown.addEventListener('change', render);
+for (const opt of [optFull, optUnknown]) {
+  opt.addEventListener('change', () => {
+    for (const r of results) {
+      if (r.report && r.line && !r.dirty) setLine(r.line, buildLine(r.report, options()));
+    }
+  });
+}
 
 export async function processFiles(files: File[]): Promise<void> {
   for (const file of files) {
-    const entry: Result = { name: file.name };
-    results.unshift(entry);
-    render();
+    const card = el('article', 'card');
+    card.append(el('div', 'card-head', el('h2', 'card-title', file.name)));
+    const status = el('p', 'muted', 'Processando…');
+    card.append(status);
+    resultsEl.prepend(card);
+    const result: Result = { card, dirty: false };
+    results.push(result);
+
     try {
       const pages = await extractLines(await file.arrayBuffer(), pdfjs);
-      entry.report = parseReport(pages);
-      if (entry.report.items.length === 0) entry.error = 'Nenhum resultado encontrado neste PDF.';
+      result.report = parseReport(pages);
+      status.remove();
+      fillCard(result, result.report);
     } catch (err) {
-      entry.error = err instanceof Error ? err.message : String(err);
+      status.className = 'error';
+      status.textContent = err instanceof Error ? err.message : String(err);
     }
-    render();
   }
 }
 
@@ -74,49 +90,36 @@ declare global {
 }
 if (import.meta.env.DEV) window.processFiles = processFiles;
 
-function render(): void {
-  const opts = { full: optFull.checked, includeUnknown: optUnknown.checked };
-  resultsEl.replaceChildren(
-    ...results.map((r) => {
-      const card = el('article', 'card');
-      const head = el('div', 'card-head');
-      head.append(el('h2', 'card-title', r.name));
-      if (r.report) head.append(el('span', 'badge', r.report.lab));
-      card.append(head);
+function fillCard(result: Result, report: ParsedReport): void {
+  const { card } = result;
+  card.querySelector('.card-head')?.append(el('span', 'badge', report.lab));
+  if (report.items.length === 0) card.append(el('p', 'error', 'Nenhum resultado encontrado neste PDF.'));
 
-      if (r.error) card.append(el('p', 'error', r.error));
-      if (!r.report) {
-        if (!r.error) card.append(el('p', 'muted', 'Processando…'));
-        return card;
-      }
+  const ta = document.createElement('textarea');
+  ta.className = 'line';
+  ta.addEventListener('input', () => (result.dirty = true));
+  setLine(ta, buildLine(report, options()));
+  result.line = ta;
+  card.append(ta);
 
-      const line = buildLine(r.report, opts);
-      const ta = document.createElement('textarea');
-      ta.className = 'line';
-      ta.value = line;
-      ta.rows = Math.max(3, Math.ceil(line.length / 110));
-      card.append(ta);
+  const copy = document.createElement('button');
+  copy.type = 'button';
+  copy.className = 'btn';
+  copy.textContent = 'Copiar';
+  copy.addEventListener('click', async () => {
+    await navigator.clipboard.writeText(ta.value);
+    copy.textContent = 'Copiado ✓';
+    setTimeout(() => (copy.textContent = 'Copiar'), 1500);
+  });
+  card.append(el('div', 'actions', copy, el('span', 'muted', `${report.items.length} valores extraídos`)));
 
-      const actions = el('div', 'actions');
-      const copy = document.createElement('button');
-      copy.type = 'button';
-      copy.className = 'btn';
-      copy.textContent = 'Copiar';
-      copy.addEventListener('click', async () => {
-        await navigator.clipboard.writeText(ta.value);
-        copy.textContent = 'Copiado ✓';
-        setTimeout(() => (copy.textContent = 'Copiar'), 1500);
-      });
-      actions.append(copy);
-      actions.append(el('span', 'muted', `${r.report.items.length} valores extraídos`));
-      card.append(actions);
+  for (const w of report.warnings) card.append(el('p', 'warn', w));
+  card.append(detailsTable(report));
+}
 
-      for (const w of r.report.warnings) card.append(el('p', 'warn', w));
-
-      card.append(detailsTable(r.report));
-      return card;
-    }),
-  );
+function setLine(ta: HTMLTextAreaElement, line: string): void {
+  ta.value = line;
+  ta.rows = Math.max(3, Math.ceil(line.length / 110));
 }
 
 function detailsTable(report: ParsedReport): HTMLElement {
@@ -124,35 +127,31 @@ function detailsTable(report: ParsedReport): HTMLElement {
   details.append(el('summary', '', 'Ver itens extraídos'));
   const table = document.createElement('table');
   table.className = 'items';
-  const thead = table.createTHead();
-  const hr = thead.insertRow();
+  const hr = table.createTHead().insertRow();
   for (const h of ['Abrev.', 'Valor', 'Exame', 'Rótulo original', 'Unidade', 'Pág.']) {
-    const th = document.createElement('th');
-    th.textContent = h;
-    hr.append(th);
+    hr.append(el('th', '', h));
   }
   const tbody = table.createTBody();
   for (const e of toEntries(report)) {
     const tr = tbody.insertRow();
-    tr.className = e.known ? (e.optional ? 'row-optional' : '') : 'row-unknown';
-    for (const v of [
+    tr.className = e.duplicate ? 'row-duplicate' : e.known ? (e.optional ? 'row-optional' : '') : 'row-unknown';
+    const cells = [
       e.known ? e.abbr : `? ${e.abbr}`,
-      e.value,
+      e.duplicate ? `${e.value} (repetido)` : e.value,
       e.item.exam,
       e.item.label,
       e.unit ?? '',
       String(e.item.page),
-    ]) {
-      tr.insertCell().textContent = v;
-    }
+    ];
+    for (const v of cells) tr.insertCell().textContent = v;
   }
   details.append(table);
   return details;
 }
 
-function el(tag: string, cls: string, text?: string): HTMLElement {
+function el(tag: string, cls: string, ...children: (string | Node)[]): HTMLElement {
   const node = document.createElement(tag);
   if (cls) node.className = cls;
-  if (text !== undefined) node.textContent = text;
+  node.append(...children);
   return node;
 }

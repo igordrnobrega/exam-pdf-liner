@@ -18,19 +18,26 @@ export async function extractLines(
   pdfjs: PdfJsModule,
 ): Promise<PageLines[]> {
   const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
-  const doc = await pdfjs.getDocument({ data: bytes }).promise;
-  const pages: PageLines[] = [];
-  for (let p = 1; p <= doc.numPages; p++) {
-    const page = await doc.getPage(p);
-    const content = await page.getTextContent();
-    const items = content.items.filter(
-      (i): i is TextItem => 'str' in i && i.str.trim() !== '',
-    );
-    pages.push({ page: p, lines: itemsToLines(items) });
-    page.cleanup();
+  // Text extraction never renders, so embedded fonts are not loaded into the
+  // page (one less thing a hostile PDF can feed the browser).
+  const task = pdfjs.getDocument({ data: bytes, disableFontFace: true });
+  try {
+    const doc = await task.promise;
+    const pages: PageLines[] = [];
+    for (let p = 1; p <= doc.numPages; p++) {
+      const page = await doc.getPage(p);
+      const content = await page.getTextContent();
+      const items = content.items.filter(
+        (i): i is TextItem => 'str' in i && i.str.trim() !== '',
+      );
+      pages.push({ page: p, lines: itemsToLines(items) });
+      page.cleanup();
+    }
+    return pages;
+  } finally {
+    // Frees the worker-side document (bytes, xref, fonts); the shared worker port survives.
+    await task.destroy();
   }
-  await doc.cleanup?.();
-  return pages;
 }
 
 interface Run {
