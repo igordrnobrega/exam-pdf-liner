@@ -1,0 +1,8 @@
+node_modules
+dist
+pdfs
+.git
+.claude
+docker-compose.yml
+docker-compose.prod.yml
+README.md

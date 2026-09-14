@@ -1,0 +1,20 @@
+# Production compose — designed to run on a Raspberry Pi (arm64).
+# Pulls a prebuilt multi-arch image from GHCR (built by .github/workflows/ci.yml
+# on each push to main). To build locally instead, pass `--build`.
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml pull && \
+#     docker compose -f docker-compose.prod.yml up -d
+
+services:
+  web:
+    image: ${EXAM_LINER_IMAGE:-ghcr.io/igordrnobrega/exam-pdf-liner:latest}
+    # Keep build context so `docker compose build` still works locally for
+    # ad-hoc testing without pulling from registry.
+    build: .
+    container_name: exam-liner
+    restart: unless-stopped
+    ports:
+      # Bind only to loopback — external traffic flows through the reverse
+      # proxy (Caddy) / Cloudflare Tunnel on the host, which route by hostname.
+      - "127.0.0.1:${APP_PORT:-8090}:80"

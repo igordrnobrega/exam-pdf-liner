@@ -27,6 +27,22 @@ docker compose run --rm node npm install
 docker compose up            # http://localhost:5173
 ```
 
+## Deploy (Raspberry Pi)
+
+Cada push na `main` roda os testes e publica a imagem multi-arch
+`ghcr.io/igordrnobrega/exam-pdf-liner:latest` (`.github/workflows/ci.yml`). No Pi:
+
+```bash
+git clone git@github.com:igordrnobrega/exam-pdf-liner.git ~/code/exam-pdf-liner
+cd ~/code/exam-pdf-liner
+docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d
+```
+
+O container `exam-liner` escuta só em `127.0.0.1:8090`; a exposição pública é pelo
+Cloudflare Tunnel (`/etc/cloudflared/config.yml`, `service: http://127.0.0.1:8090`)
+e o nome local pelo Caddy (`exames.lan { reverse_proxy 127.0.0.1:8090 }`).
+Atualizar = repetir o `pull && up -d`.
+
 ## Depurando um PDF
 
 ```bash
