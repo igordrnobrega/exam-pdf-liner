@@ -27,7 +27,11 @@ Laboratórios reconhecidos: Sabin e DASA (Exame, Lavoisier...). Outros layouts
 - O processamento é 100% local: não há servidor, upload, banco ou telemetria própria.
   O servidor que hospeda a página entrega arquivos estáticos e nada mais.
 - A política de segurança de conteúdo (CSP) bloqueia scripts e conexões fora da
-  própria origem.
+  própria origem, exceto dois coletores de métricas sem cookie: Cloudflare Web
+  Analytics (visitas) e um Umami auto-hospedado (visitas + eventos de produto:
+  `pdf_processed` com laboratório, nº de páginas/itens e duração; `pdf_failed`
+  com a categoria do erro; `copy` com o tamanho da linha). Nunca sai nome,
+  valor ou qualquer trecho do laudo. Ver `src/analytics.ts`.
 - As fixtures de teste em `src/__fixtures__/` são laudos reais anonimizados por
   `scripts/make-fixture.ts` (nome, documentos, médico, convênio, unidade e assinaturas
   substituídos). **Nunca commite um laudo real**; a pasta `pdfs/` está no `.gitignore`.

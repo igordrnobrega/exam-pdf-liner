@@ -3,11 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Everything is same-origin except the Cloudflare Web Analytics beacon.
-         'unsafe-inline' styles and ws: are for Vite's dev server (HMR). -->
+    <!-- Everything is same-origin except the two analytics collectors (Cloudflare
+         Web Analytics beacon, self-hosted Umami). 'unsafe-inline' styles and ws:
+         are for Vite's dev server (HMR). -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; connect-src 'self' https://cloudflareinsights.com ws: wss:; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'none'"
+      content="default-src 'self'; script-src 'self' https://static.cloudflareinsights.com https://umami.nobrega.page; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; connect-src 'self' https://cloudflareinsights.com https://umami.nobrega.page ws: wss:; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'none'"
     />
     <title>Exam Liner</title>
     <link rel="icon" href="data:," />
@@ -42,6 +43,12 @@
       type="module"
       src="https://static.cloudflareinsights.com/beacon.min.js"
       data-cf-beacon='{"token": "b3e5165417a64342a0606a7aa55ba01d"}'
+    ></script>
+    <!-- Umami (self-hosted): page views + product events (see src/analytics.ts). No cookies. -->
+    <script
+      defer
+      src="https://umami.nobrega.page/script.js"
+      data-website-id="5cbefe25-932f-42ae-8ef3-a7d5a84a366a"
     ></script>
   </body>
 </html>

@@ -3,6 +3,7 @@ import * as pdfjs from 'pdfjs-dist';
 import { extractLines } from './pdf/extract';
 import { parseReport, type ParsedReport } from './parser';
 import { buildLine, toEntries, type LineOptions } from './format/line';
+import { track } from './analytics';
 
 const worker = new Worker(new URL('./pdf/worker.ts', import.meta.url), { type: 'module' });
 pdfjs.GlobalWorkerOptions.workerPort = worker;
@@ -77,14 +78,25 @@ export async function processFiles(files: File[]): Promise<void> {
     const result: Result = { card, dirty: false };
     results.push(result);
 
+    const started = performance.now();
     try {
       const pages = await Promise.race([extractLines(await file.arrayBuffer(), pdfjs), workerFailure]);
       result.report = parseReport(pages);
       status.remove();
       fillCard(result, result.report);
+      const entries = toEntries(result.report);
+      track('pdf_processed', {
+        lab: result.report.lab,
+        pages: pages.length,
+        items: result.report.items.length,
+        known: entries.filter((e) => e.known && !e.duplicate).length,
+        unknown: entries.filter((e) => !e.known).length,
+        ms: Math.round(performance.now() - started),
+      });
     } catch (err) {
       status.className = 'error';
       status.textContent = err instanceof Error ? err.message : String(err);
+      track('pdf_failed', { reason: err instanceof Error ? err.name : 'unknown', ms: Math.round(performance.now() - started) });
     }
   }
 }
@@ -115,6 +127,7 @@ function fillCard(result: Result, report: ParsedReport): void {
   copy.textContent = 'Copiar';
   copy.addEventListener('click', async () => {
     await navigator.clipboard.writeText(ta.value);
+    track('copy', { lab: report.lab, chars: ta.value.length, edited: result.dirty });
     copy.textContent = 'Copiado ✓';
     setTimeout(() => (copy.textContent = 'Copiar'), 1500);
   });
