@@ -1,0 +1,32 @@
+# Weekly bumps for everything that rots: workflow actions, npm packages and
+# the Docker base images. Minor/patch updates arrive grouped in one PR per
+# ecosystem; majors get their own PR. CI validates each one.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ['*']
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      npm-minor-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      base-images:
+        patterns: ['*']

@@ -11,7 +11,7 @@ Tudo roda no navegador (pdf.js + TypeScript). O PDF nunca sai da máquina.
 
 ## Rodando
 
-Com Node instalado:
+Com Node 24 instalado:
 
 ```bash
 npm install
