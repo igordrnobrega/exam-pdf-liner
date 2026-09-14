@@ -1,6 +1,10 @@
 # Weekly bumps for everything that rots: workflow actions, npm packages and
 # the Docker base images. Minor/patch updates arrive grouped in one PR per
 # ecosystem; majors get their own PR. CI validates each one.
+#
+# `cooldown` is the minimum age a release must have before Dependabot proposes
+# it: supply-chain attacks are usually caught and yanked within days, so waiting
+# keeps freshly compromised versions out (majors wait longer than patches).
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -8,6 +12,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ['*']
@@ -17,6 +23,11 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+      semver-minor-days: 14
+      semver-patch-days: 7
     groups:
       npm-minor-patch:
         patterns: ['*']
@@ -27,6 +38,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     groups:
       base-images:
         patterns: ['*']
