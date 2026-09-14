@@ -9,8 +9,8 @@ NOME DO PACIENTE – 04/09/2026: Hb 11,3 Ht 33,7 VCM 88,2 RDW 14,2 Leuc 3.660 N 
 
 Tudo roda no navegador (pdf.js + TypeScript). O PDF nunca sai da máquina.
 
-**Use online:** https://igordrnobrega.github.io/exam-pdf-liner/ (GitHub Pages, publicado a cada
-push na `main`).
+**Use online:** https://exam-liner.nobrega.page/ (GitHub Pages, publicado a cada push na
+`main`).
 
 Laboratórios reconhecidos: Sabin e DASA (Exame, Lavoisier...). Outros layouts
 `RÓTULO: valor unidade` costumam funcionar com a extração genérica; ver

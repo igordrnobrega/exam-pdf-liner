@@ -8,13 +8,10 @@ on:
       - '.claude/**'
       - 'docker-compose.yml'
       - '.github/dependabot.yml'
+  # No paths-ignore here: the checks are required by the branch ruleset, so a
+  # docs-only PR must still produce them or it can never be merged.
   pull_request:
     branches: [main]
-    paths-ignore:
-      - 'README.md'
-      - '.claude/**'
-      - 'docker-compose.yml'
-      - '.github/dependabot.yml'
 
 # A newer push to the same branch/PR supersedes the run in flight.
 concurrency:
