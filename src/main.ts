@@ -4,8 +4,15 @@ import { extractLines } from './pdf/extract';
 import { parseReport, type ParsedReport } from './parser';
 import { buildLine, toEntries, type LineOptions } from './format/line';
 
-pdfjs.GlobalWorkerOptions.workerPort = new Worker(new URL('./pdf/worker.ts', import.meta.url), {
-  type: 'module',
+const worker = new Worker(new URL('./pdf/worker.ts', import.meta.url), { type: 'module' });
+pdfjs.GlobalWorkerOptions.workerPort = worker;
+
+// If the worker script fails to load (stale cache, blocked script), pdf.js waits
+// forever for it; race extraction against that failure so the user sees why.
+const workerFailure = new Promise<never>((_, reject) => {
+  worker.addEventListener('error', (e) => {
+    reject(new Error(`Falha ao carregar o processador de PDF (${e.message || 'worker'}). Recarregue a página limpando o cache.`));
+  });
 });
 
 /** One dropped file: its card is created once and updated in place. */
@@ -71,7 +78,7 @@ export async function processFiles(files: File[]): Promise<void> {
     results.push(result);
 
     try {
-      const pages = await extractLines(await file.arrayBuffer(), pdfjs);
+      const pages = await Promise.race([extractLines(await file.arrayBuffer(), pdfjs), workerFailure]);
       result.report = parseReport(pages);
       status.remove();
       fillCard(result, result.report);
