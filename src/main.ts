@@ -53,7 +53,11 @@ for (const evt of ['dragleave', 'drop']) {
     drop.classList.remove('drop--over');
   });
 }
-drop.addEventListener('drop', (e) => {
+// A PDF dropped anywhere on the page is processed; outside the drop zone the
+// browser's default would navigate away and lose every result.
+document.addEventListener('dragover', (e) => e.preventDefault());
+document.addEventListener('drop', (e) => {
+  e.preventDefault();
   const files = Array.from(e.dataTransfer?.files ?? []).filter((f) =>
     /\.pdf$/i.test(f.name) || f.type === 'application/pdf',
   );
@@ -126,15 +130,33 @@ function fillCard(result: Result, report: ParsedReport): void {
   copy.className = 'btn';
   copy.textContent = 'Copiar';
   copy.addEventListener('click', async () => {
-    await navigator.clipboard.writeText(ta.value);
-    track('copy', { lab: report.lab, chars: ta.value.length, edited: result.dirty });
-    copy.textContent = 'Copiado ✓';
-    setTimeout(() => (copy.textContent = 'Copiar'), 1500);
+    const ok = await copyText(ta);
+    if (ok) track('copy', { lab: report.lab, chars: ta.value.length, edited: result.dirty });
+    copy.textContent = ok ? 'Copiado ✓' : 'Selecionado: use Ctrl+C / ⌘C';
+    setTimeout(() => (copy.textContent = 'Copiar'), ok ? 1500 : 4000);
   });
   card.append(el('div', 'actions', copy, el('span', 'muted', `${report.items.length} valores extraídos`)));
 
-  for (const w of report.warnings) card.append(el('p', 'warn', w));
+  if (report.warning) card.append(el('p', 'warn', report.warning));
   card.append(detailsTable(report));
+}
+
+/**
+ * Copies the line. navigator.clipboard only exists in secure contexts (HTTPS,
+ * localhost); on plain http the text is left selected so a keyboard copy works.
+ */
+async function copyText(ta: HTMLTextAreaElement): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(ta.value);
+      return true;
+    }
+  } catch {
+    // permission denied or no clipboard: fall through to selection
+  }
+  ta.focus();
+  ta.select();
+  return false;
 }
 
 function setLine(ta: HTMLTextAreaElement, line: string): void {

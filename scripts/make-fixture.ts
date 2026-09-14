@@ -7,12 +7,11 @@
  * doctors, document numbers and signatures replaced) plus the expected output
  * of the current pipeline. Review the JSON before committing it.
  */
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
-import { extractLines, type PageLines } from '../src/pdf/extract';
-import { parseReport } from '../src/parser';
+import { writeFileSync, mkdirSync } from 'node:fs';
+import { readPdfLines } from './lib';
+import type { PageLines } from '../src/pdf/extract';
 import { LAYOUTS } from '../src/parser/layouts';
-import { buildLine } from '../src/format/line';
+import { expectedFor, type Fixture } from '../src/fixtures';
 
 // Applied in order to every line. Lines whose whole content is replaced, and inline substitutions.
 const REPLACEMENTS: [RegExp, string][] = [
@@ -70,7 +69,7 @@ function anonymise(pages: PageLines[]): PageLines[] {
       let out = afterDoctor && !/\d/.test(line) && line.split(' ').length <= 4 ? 'ANONIMO' : line;
       afterDoctor = DOCTOR_LINE.test(line);
       for (const [re, rep] of REPLACEMENTS) out = out.replace(re, rep);
-      for (const n of names) out = out.split(n).join('NOME ANONIMO');
+      for (const n of names) out = out.replace(new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g'), 'NOME ANONIMO');
       return out;
     });
     return { page: p.page, lines };
@@ -78,15 +77,8 @@ function anonymise(pages: PageLines[]): PageLines[] {
 }
 
 async function main(file: string, name: string): Promise<void> {
-  const pages = anonymise(await extractLines(new Uint8Array(readFileSync(file)), pdfjs));
-  const report = parseReport(pages);
-  const fixture = {
-    pages,
-    expected: {
-      line: buildLine(report),
-      full: buildLine(report, { full: true, includeUnknown: true }),
-    },
-  };
+  const pages = anonymise(await readPdfLines(file));
+  const fixture: Fixture = { pages, expected: expectedFor(pages) };
   mkdirSync('src/__fixtures__', { recursive: true });
   const out = `src/__fixtures__/${name}.json`;
   writeFileSync(out, JSON.stringify(fixture, null, 1) + '\n');
