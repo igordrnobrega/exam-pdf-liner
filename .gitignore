@@ -3,3 +3,4 @@ dist
 pdfs/
 *.pdf
 .DS_Store
+.claude/settings.local.json
