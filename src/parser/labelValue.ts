@@ -22,8 +22,10 @@ const NUM_RE = new RegExp(`^${NUM}$`);
 
 // "LABEL....: 11,3 g/dL 12,0 a 15,8" or "LABEL 11,3 g/dL ...". Group 2 captures
 // the colon, when there is one. Labels may carry charge signs ("Na+", "Ca++").
+// The number may carry a flag ("128*") or a glued unit ("92mg/dL"); dates,
+// times and document numbers ("03/09/2026", "577-67816") still fail the lookahead.
 const ROW = new RegExp(
-  String.raw`^([A-Za-zÀ-ÿ*][A-Za-zÀ-ÿ0-9 ()\-/.,*ªº³^+=&≥≤]*?)(?:\s*\.*\s*(:)\s*|\s+)(${NUM})(?=\s|$)\s*(.*)$`,
+  String.raw`^([A-Za-zÀ-ÿ*][A-Za-zÀ-ÿ0-9 ()\-/.,*ªº³^+=&≥≤]*?)(?:\s*\.*\s*(:)\s*|\s+)(${NUM})\*?(?=\s|$|[A-Za-zµμ%])\s*(.*)$`,
 );
 
 /**
@@ -95,11 +97,7 @@ const COLLECTED_RE = /Coleta[^:]*:\s*(\d{2}\/\d{2}\/\d{4})/i;
 const MAX_ROW_LENGTH = 500;
 
 export function parseLabelValue(pages: PageLines[], layout: Layout): ParsedReport {
-  const report: ParsedReport = {
-    lab: layout.lab,
-    items: [],
-    warnings: layout.warning ? [layout.warning] : [],
-  };
+  const report: ParsedReport = { lab: layout.lab, items: [], warning: layout.warning };
   const skip = [...COMMON_SKIP, ...layout.skip];
   let exam = '';
 
@@ -116,7 +114,7 @@ export function parseLabelValue(pages: PageLines[], layout: Layout): ParsedRepor
       const row = parseRow(line, layout);
       if (row) {
         report.items.push({ ...row, exam: exam || row.label, page: page.page });
-      } else if (layout.isTitle(line, lines.slice(i + 1, i + 4))) {
+      } else if (layout.isTitle(line, lines[i + 1] ?? '')) {
         exam = line;
       }
     }

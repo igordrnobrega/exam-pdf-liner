@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseLabelValue } from './labelValue';
+import { parseReport } from './index';
 import { DASA, SABIN } from './layouts';
 import { buildLine } from '../format/line';
 
@@ -185,7 +186,48 @@ describe('parseLabelValue (DASA layout)', () => {
   });
 });
 
+describe('gasometria groups', () => {
+  it('prints arterial and venous gases as two contiguous groups, neither treated as a duplicate', () => {
+    const report = parseLabelValue(
+      [
+        sabinPage(1, [
+          'GASOMETRIA ARTERIAL',
+          'Método : Sensor',
+          'pH...............:7,300',
+          'PCO2.............:50,0 mmHg',
+          'HCO3.............:24,0 mmol/L',
+          'GASOMETRIA VENOSA',
+          'Método : Sensor',
+          'pH...............:7,400',
+          'PCO2.............:30,0 mmHg',
+          'HCO3.............:18,6 mmol/L',
+        ]),
+      ],
+      SABIN,
+    );
+    expect(buildLine(report)).toBe(
+      'MARIA DA SILVA – 04/09/2026: GSA pH 7,300 pCO2 50,0 HCO3 24,0 GSV pH 7,400 pCO2 30,0 HCO3 18,6.',
+    );
+  });
+});
+
+describe('layout detection', () => {
+  it('does not mistake an unrelated "Adasa" for the DASA layout', () => {
+    const lines = ['Convênio: Adasa Saúde', 'CREATININA', 'Método : X', 'RESULTADO: 0,9 mg/dL'];
+    expect(parseReport([{ page: 1, lines }]).lab).toBe('Desconhecido');
+    expect(parseReport([{ page: 1, lines: [...lines, 'Local de execução: - DASA - Rua X'] }]).lab).toBe('DASA');
+  });
+});
+
 describe('units and scaling', () => {
+  it('accepts a glued unit or a flag after the number', () => {
+    const report = rows(['RESULTADO: 92mg/dL', 'SÓDIO', 'Método : Y', 'RESULTADO: 128* mEq/L']);
+    expect(report.items.map((i) => i.values[0])).toEqual([
+      { value: '92', unit: 'mg/dl' },
+      { value: '128', unit: 'meq/l' },
+    ]);
+  });
+
   const rows = (lines: string[]) => parseLabelValue([sabinPage(1, ['HEMOGRAMA COMPLETO', 'Método : X', ...lines])], SABIN);
 
   it('rescales thousands-per-volume units into absolute counts, keeping < and >', () => {

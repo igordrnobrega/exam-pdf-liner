@@ -20,5 +20,6 @@ export interface ParsedReport {
   /** Collection date as printed, dd/mm/yyyy. */
   collectedAt?: string;
   items: ExamItem[];
-  warnings: string[];
+  /** Set when the layout was a guess rather than a match. */
+  warning?: string;
 }

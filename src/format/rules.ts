@@ -211,12 +211,14 @@ export function findRuleIndex(item: ExamItem): number {
   return RULES.findIndex((r) => r.match(n, exam));
 }
 
+/** What the formatter needs from a rule once matching is done. */
+export type PrintRule = Omit<Rule, 'match'>;
+
 /** Rule for an item nothing matched: printed under its own label, percentages kept. */
-export function fallbackRule(item: ExamItem): Rule {
+export function fallbackRule(item: ExamItem): PrintRule {
   return {
     abbr: titleCase(itemName(item).replace(/\s*\(.*?\)\s*/g, ' ').trim()),
     suffix: item.values[0].unit === '%' ? '%' : undefined,
-    match: () => true,
   };
 }
 
