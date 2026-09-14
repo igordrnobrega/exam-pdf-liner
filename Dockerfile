@@ -6,7 +6,7 @@
 # is per-platform. Requires BuildKit (default in docker build / buildx).
 
 # ---- Stage 1: build (native) ----
-FROM --platform=$BUILDPLATFORM node:24-alpine AS builder
+FROM --platform=$BUILDPLATFORM node:26-alpine AS builder
 WORKDIR /web
 # Dependencies first so this layer is reused until the lock changes; the npm
 # cache mount keeps downloaded tarballs across builds even when it does.
@@ -16,7 +16,7 @@ COPY . ./
 RUN npm run build
 
 # ---- Stage 2: serve (per target platform) ----
-FROM nginx:1.29-alpine
+FROM nginx:1.31-alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /web/dist /usr/share/nginx/html
 EXPOSE 80
